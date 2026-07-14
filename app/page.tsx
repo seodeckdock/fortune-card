@@ -120,13 +120,13 @@ export default function Home() {
       </div>
 
       <div className="relative z-10 text-center">
-        <p className="text-xs tracking-[0.3em] text-purple-300/80 uppercase">
+        <p className="text-xs font-semibold tracking-[0.3em] text-white/90 uppercase drop-shadow">
           Today&apos;s Fortune
         </p>
-        <h1 className="mt-2 bg-gradient-to-r from-amber-200 via-fuchsia-200 to-indigo-200 bg-clip-text text-4xl font-bold text-transparent">
-          오늘의 운세
+        <h1 className="mt-2 text-4xl font-extrabold text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.35)]">
+          🌈 오늘의 운세
         </h1>
-        <p className="mt-3 text-sm text-indigo-200/70">
+        <p className="mt-3 text-sm font-medium text-white/90 drop-shadow">
           카드를 눌러 오늘 하루의 운세를 확인해보세요
         </p>
       </div>
@@ -138,17 +138,17 @@ export default function Home() {
         className="perspective relative z-10 h-80 w-56 cursor-pointer sm:h-96 sm:w-64"
       >
         <div className={`flip-card-inner ${flipped ? "is-flipped" : ""}`}>
-          <div className="flip-card-face flex flex-col items-center justify-center gap-4 rounded-2xl border border-amber-200/30 bg-gradient-to-br from-indigo-950 via-purple-900 to-indigo-950 shadow-[0_0_40px_rgba(168,85,247,0.35)]">
-            <span className="text-6xl">🔮</span>
-            <span className="text-lg font-semibold text-amber-100">
+          <div className="flip-card-face flex flex-col items-center justify-center gap-4 rounded-2xl border-4 border-white/70 bg-[conic-gradient(from_180deg,#ff4d4d,#ff9a3d,#ffe23d,#4dd06a,#4db5ff,#4d5dff,#a64dff,#ff4d4d)] shadow-[0_0_40px_rgba(255,255,255,0.5)]">
+            <span className="text-6xl drop-shadow">🔮</span>
+            <span className="rounded-full bg-black/30 px-3 py-1 text-lg font-bold text-white backdrop-blur">
               운세 뽑기
             </span>
-            <span className="text-xs text-indigo-200/60">
+            <span className="text-xs font-medium text-white/90 drop-shadow">
               탭하여 카드를 뒤집으세요
             </span>
           </div>
 
-          <div className="flip-card-face flip-card-back flex flex-col items-center justify-center gap-3 rounded-2xl border border-amber-200/30 bg-gradient-to-br from-amber-50 via-white to-indigo-50 p-6 text-center shadow-[0_0_40px_rgba(251,191,36,0.35)]">
+          <div className="flip-card-face flip-card-back flex flex-col items-center justify-center gap-3 rounded-2xl border-4 border-transparent bg-white bg-clip-padding p-6 text-center shadow-[0_0_40px_rgba(255,255,255,0.6)] [background-image:linear-gradient(white,white),linear-gradient(120deg,#ff4d4d,#ff9a3d,#ffe23d,#4dd06a,#4db5ff,#4d5dff,#a64dff)] [background-origin:border-box] [background-clip:padding-box,border-box]">
             {result && (
               <>
                 <span className="text-4xl">✨</span>
@@ -178,7 +178,7 @@ export default function Home() {
       <button
         type="button"
         onClick={handleDraw}
-        className="relative z-10 rounded-full border border-amber-200/40 bg-white/5 px-6 py-2 text-sm font-medium text-amber-100 backdrop-blur transition hover:bg-white/10"
+        className="relative z-10 rounded-full border-2 border-white/80 bg-white/20 px-6 py-2 text-sm font-bold text-white backdrop-blur transition hover:bg-white/30"
       >
         {flipped ? "다시 뽑기" : "오늘의 운세 보기"}
       </button>
