@@ -1,8 +1,8 @@
 @import "tailwindcss";
 
 :root {
-  --background: #1a1030;
-  --foreground: #fffdf5;
+  --background: #0a0a1f;
+  --foreground: #f5f0ff;
 }
 
 @theme inline {
@@ -12,31 +12,8 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@keyframes rainbow-shift {
-  0% {
-    background-position: 0% 50%;
-  }
-  50% {
-    background-position: 100% 50%;
-  }
-  100% {
-    background-position: 0% 50%;
-  }
-}
-
 body {
-  background: linear-gradient(
-    120deg,
-    #ff4d4d,
-    #ff9a3d,
-    #ffe23d,
-    #4dd06a,
-    #4db5ff,
-    #4d5dff,
-    #a64dff
-  );
-  background-size: 300% 300%;
-  animation: rainbow-shift 18s ease infinite;
+  background: radial-gradient(circle at 20% 15%, #33205c 0%, #120a2e 45%, #05050f 100%);
   color: var(--foreground);
   font-family: var(--font-sans), Arial, Helvetica, sans-serif;
   min-height: 100vh;
