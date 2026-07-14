@@ -1,65 +1,187 @@
-import Image from "next/image";
+"use client";
+
+import { useState } from "react";
+
+const FORTUNE_MESSAGES = [
+  "오늘은 뜻밖의 좋은 소식이 들려올 거예요.",
+  "작은 용기가 큰 변화를 만드는 하루입니다.",
+  "주변 사람에게 먼저 인사를 건네보세요. 좋은 인연이 시작됩니다.",
+  "미뤄왔던 일을 시작하기에 완벽한 타이밍이에요.",
+  "생각보다 일이 술술 풀리는 하루가 될 거예요.",
+  "오늘 만나는 사람과의 대화 속에 힌트가 있어요.",
+  "작은 실수에 너무 연연하지 마세요. 곧 만회할 기회가 옵니다.",
+  "평소보다 직감이 예리해지는 날이에요. 믿고 따라가 보세요.",
+  "지출보다는 저축에 신경 쓰면 좋은 하루입니다.",
+  "가까운 사람과의 오해가 자연스럽게 풀립니다.",
+  "새로운 도전을 하기에 아주 좋은 기운이 감돕니다.",
+  "쉬어가는 여유가 필요한 하루예요. 잠시 멈춰도 괜찮아요.",
+  "칭찬 한마디가 하루를 특별하게 만들어 줄 거예요.",
+  "오늘 내린 결정이 훗날 좋은 결과로 돌아옵니다.",
+  "예상치 못한 곳에서 도움의 손길을 받게 됩니다.",
+  "꾸준함이 빛을 발하는 순간이 다가오고 있어요.",
+  "감정 표현에 솔직해지면 관계가 더 깊어집니다.",
+  "작은 행운이 연이어 찾아오는 하루가 될 거예요.",
+  "계획했던 일이 순조롭게 마무리됩니다.",
+  "오늘의 당신은 그 자체로 빛나고 있어요.",
+];
+
+const LUCKY_ITEMS = [
+  "우산",
+  "손거울",
+  "초콜릿",
+  "만년필",
+  "향초",
+  "텀블러",
+  "손편지",
+  "반지",
+  "이어폰",
+  "다이어리",
+  "스카프",
+  "동전지갑",
+  "책",
+  "캔들",
+  "머그컵",
+  "열쇠고리",
+  "화분",
+  "향수",
+];
+
+const LUCKY_COLORS = [
+  "빨간색",
+  "주황색",
+  "노란색",
+  "초록색",
+  "하늘색",
+  "파란색",
+  "보라색",
+  "분홍색",
+  "하얀색",
+  "검정색",
+  "금색",
+  "은색",
+];
+
+const STARS = Array.from({ length: 28 }, (_, i) => ({
+  top: `${(i * 37) % 100}%`,
+  left: `${(i * 53) % 100}%`,
+  size: `${1 + (i % 3)}px`,
+  delay: `${(i % 5) * 0.6}s`,
+}));
+
+type FortuneResult = {
+  message: string;
+  item: string;
+  color: string;
+  number: number;
+};
+
+function pickRandom<T>(list: T[]): T {
+  return list[Math.floor(Math.random() * list.length)];
+}
+
+function drawFortune(): FortuneResult {
+  return {
+    message: pickRandom(FORTUNE_MESSAGES),
+    item: pickRandom(LUCKY_ITEMS),
+    color: pickRandom(LUCKY_COLORS),
+    number: Math.floor(Math.random() * 99) + 1,
+  };
+}
 
 export default function Home() {
+  const [flipped, setFlipped] = useState(false);
+  const [result, setResult] = useState<FortuneResult | null>(null);
+
+  const handleDraw = () => {
+    if (flipped) {
+      setFlipped(false);
+      return;
+    }
+    setResult(drawFortune());
+    setFlipped(true);
+  };
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div className="relative flex flex-1 flex-col items-center justify-center gap-10 overflow-hidden px-4 py-16">
+      <div className="pointer-events-none absolute inset-0">
+        {STARS.map((s, i) => (
+          <span
+            key={i}
+            className="star"
+            style={{
+              top: s.top,
+              left: s.left,
+              width: s.size,
+              height: s.size,
+              animationDelay: s.delay,
+            }}
+          />
+        ))}
+      </div>
+
+      <div className="relative z-10 text-center">
+        <p className="text-xs tracking-[0.3em] text-purple-300/80 uppercase">
+          Today&apos;s Fortune
+        </p>
+        <h1 className="mt-2 bg-gradient-to-r from-amber-200 via-fuchsia-200 to-indigo-200 bg-clip-text text-4xl font-bold text-transparent">
+          오늘의 운세
+        </h1>
+        <p className="mt-3 text-sm text-indigo-200/70">
+          카드를 눌러 오늘 하루의 운세를 확인해보세요
+        </p>
+      </div>
+
+      <button
+        type="button"
+        onClick={handleDraw}
+        aria-label="운세 카드 뒤집기"
+        className="perspective relative z-10 h-80 w-56 cursor-pointer sm:h-96 sm:w-64"
+      >
+        <div className={`flip-card-inner ${flipped ? "is-flipped" : ""}`}>
+          <div className="flip-card-face flex flex-col items-center justify-center gap-4 rounded-2xl border border-amber-200/30 bg-gradient-to-br from-indigo-950 via-purple-900 to-indigo-950 shadow-[0_0_40px_rgba(168,85,247,0.35)]">
+            <span className="text-6xl">🔮</span>
+            <span className="text-lg font-semibold text-amber-100">
+              운세 뽑기
+            </span>
+            <span className="text-xs text-indigo-200/60">
+              탭하여 카드를 뒤집으세요
+            </span>
+          </div>
+
+          <div className="flip-card-face flip-card-back flex flex-col items-center justify-center gap-3 rounded-2xl border border-amber-200/30 bg-gradient-to-br from-amber-50 via-white to-indigo-50 p-6 text-center shadow-[0_0_40px_rgba(251,191,36,0.35)]">
+            {result && (
+              <>
+                <span className="text-4xl">✨</span>
+                <p className="text-base leading-relaxed font-medium text-indigo-950">
+                  {result.message}
+                </p>
+                <div className="mt-2 grid w-full grid-cols-1 gap-1 text-sm text-indigo-800/80">
+                  <p>
+                    🍀 행운의 아이템:{" "}
+                    <span className="font-semibold">{result.item}</span>
+                  </p>
+                  <p>
+                    🎨 행운의 색:{" "}
+                    <span className="font-semibold">{result.color}</span>
+                  </p>
+                  <p>
+                    🔢 행운의 숫자:{" "}
+                    <span className="font-semibold">{result.number}</span>
+                  </p>
+                </div>
+              </>
+            )}
+          </div>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+      </button>
+
+      <button
+        type="button"
+        onClick={handleDraw}
+        className="relative z-10 rounded-full border border-amber-200/40 bg-white/5 px-6 py-2 text-sm font-medium text-amber-100 backdrop-blur transition hover:bg-white/10"
+      >
+        {flipped ? "다시 뽑기" : "오늘의 운세 보기"}
+      </button>
     </div>
   );
 }
