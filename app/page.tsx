@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 const FORTUNE_MESSAGES = [
   "오늘은 뜻밖의 좋은 소식이 들려올 거예요.",
@@ -75,6 +75,14 @@ type FortuneResult = {
   number: number;
 };
 
+type HistoryEntry = FortuneResult & {
+  /** 뽑은 시각 (epoch ms) */
+  drawnAt: number;
+};
+
+const HISTORY_KEY = "fortune-history";
+const MAX_HISTORY = 50;
+
 function pickRandom<T>(list: T[]): T {
   return list[Math.floor(Math.random() * list.length)];
 }
@@ -88,21 +96,71 @@ function drawFortune(): FortuneResult {
   };
 }
 
+function loadHistory(): HistoryEntry[] {
+  try {
+    const raw = localStorage.getItem(HISTORY_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as HistoryEntry[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function formatTime(ms: number): string {
+  return new Date(ms).toLocaleString("ko-KR", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 export default function Home() {
   const [flipped, setFlipped] = useState(false);
   const [result, setResult] = useState<FortuneResult | null>(null);
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [mounted, setMounted] = useState(false);
+
+  // 최초 렌더 이후 localStorage에서 기록을 불러온다 (SSR 하이드레이션 불일치 방지)
+  useEffect(() => {
+    setHistory(loadHistory());
+    setMounted(true);
+  }, []);
 
   const handleDraw = () => {
     if (flipped) {
       setFlipped(false);
       return;
     }
-    setResult(drawFortune());
+    const fortune = drawFortune();
+    setResult(fortune);
     setFlipped(true);
+
+    const entry: HistoryEntry = { ...fortune, drawnAt: Date.now() };
+    setHistory((prev) => {
+      const next = [entry, ...prev].slice(0, MAX_HISTORY); // 최신순, 최대 50개
+      try {
+        localStorage.setItem(HISTORY_KEY, JSON.stringify(next));
+      } catch {
+        // 저장 실패는 무시 (용량 초과 등)
+      }
+      return next;
+    });
+  };
+
+  const handleClearHistory = () => {
+    setHistory([]);
+    try {
+      localStorage.removeItem(HISTORY_KEY);
+    } catch {
+      // 무시
+    }
   };
 
   return (
-    <div className="relative flex flex-1 flex-col items-center justify-center gap-10 overflow-hidden px-4 py-16">
+    <div className="relative flex flex-1 flex-col items-center gap-10 overflow-hidden px-4 py-16">
       <div className="pointer-events-none absolute inset-0">
         {STARS.map((s, i) => (
           <span
@@ -182,6 +240,63 @@ export default function Home() {
       >
         {flipped ? "다시 뽑기" : "오늘의 운세 보기"}
       </button>
+
+      <section className="relative z-10 w-full max-w-2xl">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-amber-100">
+            📜 내 운세 기록
+          </h2>
+          {mounted && history.length > 0 && (
+            <button
+              type="button"
+              onClick={handleClearHistory}
+              className="rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs text-indigo-200/70 transition hover:bg-white/10"
+            >
+              기록 지우기
+            </button>
+          )}
+        </div>
+
+        <div className="overflow-x-auto rounded-2xl border border-white/10 bg-white/5 backdrop-blur">
+          {!mounted ? (
+            <p className="px-4 py-8 text-center text-sm text-indigo-200/50">
+              기록을 불러오는 중…
+            </p>
+          ) : history.length === 0 ? (
+            <p className="px-4 py-8 text-center text-sm text-indigo-200/60">
+              아직 기록이 없어요. 카드를 뒤집어 운세를 뽑아보세요!
+            </p>
+          ) : (
+            <table className="w-full min-w-[32rem] border-collapse text-left text-sm">
+              <thead>
+                <tr className="border-b border-white/10 text-xs tracking-wide text-purple-200/70 uppercase">
+                  <th className="px-4 py-3 font-medium">뽑은 시각</th>
+                  <th className="px-4 py-3 font-medium">운세</th>
+                  <th className="px-4 py-3 font-medium whitespace-nowrap">
+                    행운의 아이템 · 색 · 숫자
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {history.map((entry) => (
+                  <tr
+                    key={entry.drawnAt}
+                    className="border-b border-white/5 last:border-0 text-indigo-100/90"
+                  >
+                    <td className="px-4 py-3 align-top whitespace-nowrap text-indigo-200/70">
+                      {formatTime(entry.drawnAt)}
+                    </td>
+                    <td className="px-4 py-3 align-top">{entry.message}</td>
+                    <td className="px-4 py-3 align-top whitespace-nowrap text-indigo-200/80">
+                      {entry.item} · {entry.color} · {entry.number}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </section>
     </div>
   );
 }
