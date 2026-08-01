@@ -1,6 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { getSupabase } from "@/lib/supabase";
+
+const TABLE = "fortunes";
+const COLUMNS = "created_at, name, content";
 
 const FORTUNE_MESSAGES = [
   "오늘은 뜻밖의 좋은 소식이 들려올 거예요.",
@@ -75,13 +79,27 @@ type FortuneResult = {
   number: number;
 };
 
-type HistoryEntry = FortuneResult & {
-  /** 뽑은 시각 (epoch ms) */
-  drawnAt: number;
+/** 화면/DB에서 다루는 운세 기록 (fortunes 테이블: 날짜·이름·운세 내용) */
+type FortuneRecord = {
+  createdAt: number; // 날짜 (epoch ms)
+  name: string; // 이름
+  content: string; // 운세 내용
 };
 
-const HISTORY_KEY = "fortune-history";
-const MAX_HISTORY = 50;
+/** Supabase fortunes 테이블에서 내려오는 행 형태 */
+type FortuneRow = {
+  created_at: string;
+  name: string;
+  content: string;
+};
+
+function rowToRecord(r: FortuneRow): FortuneRecord {
+  return {
+    createdAt: Date.parse(r.created_at),
+    name: r.name,
+    content: r.content,
+  };
+}
 
 function pickRandom<T>(list: T[]): T {
   return list[Math.floor(Math.random() * list.length)];
@@ -94,17 +112,6 @@ function drawFortune(): FortuneResult {
     color: pickRandom(LUCKY_COLORS),
     number: Math.floor(Math.random() * 99) + 1,
   };
-}
-
-function loadHistory(): HistoryEntry[] {
-  try {
-    const raw = localStorage.getItem(HISTORY_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? (parsed as HistoryEntry[]) : [];
-  } catch {
-    return [];
-  }
 }
 
 function formatTime(ms: number): string {
@@ -120,13 +127,33 @@ function formatTime(ms: number): string {
 export default function Home() {
   const [flipped, setFlipped] = useState(false);
   const [result, setResult] = useState<FortuneResult | null>(null);
-  const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [name, setName] = useState("");
+  const [records, setRecords] = useState<FortuneRecord[]>([]);
   const [mounted, setMounted] = useState(false);
 
-  // 최초 렌더 이후 localStorage에서 기록을 불러온다 (SSR 하이드레이션 불일치 방지)
+  // 마운트 후 Supabase에서 최신 기록을 불러온다 (브라우저에서 직접 조회).
   useEffect(() => {
-    setHistory(loadHistory());
-    setMounted(true);
+    let active = true;
+
+    (async () => {
+      try {
+        const { data, error } = await getSupabase()
+          .from(TABLE)
+          .select(COLUMNS)
+          .order("created_at", { ascending: false })
+          .limit(50);
+        if (error) throw error;
+        if (active) setRecords((data as FortuneRow[]).map(rowToRecord));
+      } catch (e) {
+        console.error("운세 기록 조회 실패:", (e as Error).message);
+      } finally {
+        if (active) setMounted(true);
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
   }, []);
 
   const handleDraw = () => {
@@ -138,25 +165,33 @@ export default function Home() {
     setResult(fortune);
     setFlipped(true);
 
-    const entry: HistoryEntry = { ...fortune, drawnAt: Date.now() };
-    setHistory((prev) => {
-      const next = [entry, ...prev].slice(0, MAX_HISTORY); // 최신순, 최대 50개
-      try {
-        localStorage.setItem(HISTORY_KEY, JSON.stringify(next));
-      } catch {
-        // 저장 실패는 무시 (용량 초과 등)
-      }
-      return next;
-    });
+    const who = name.trim() || "익명";
+    // 낙관적 업데이트 (화면에 즉시 반영)
+    const optimistic: FortuneRecord = {
+      createdAt: Date.now(),
+      name: who,
+      content: fortune.message,
+    };
+    setRecords((prev) => [optimistic, ...prev]);
+
+    // Supabase에 자동 저장 (날짜 created_at 은 DB에서 기록)
+    getSupabase()
+      .from(TABLE)
+      .insert({ name: who, content: fortune.message })
+      .then(({ error }) => {
+        if (error) console.error("운세 저장 실패:", error.message);
+      });
   };
 
   const handleClearHistory = () => {
-    setHistory([]);
-    try {
-      localStorage.removeItem(HISTORY_KEY);
-    } catch {
-      // 무시
-    }
+    setRecords([]);
+    getSupabase()
+      .from(TABLE)
+      .delete()
+      .gte("created_at", "1970-01-01T00:00:00Z")
+      .then(({ error }) => {
+        if (error) console.error("기록 삭제 실패:", error.message);
+      });
   };
 
   return (
@@ -187,6 +222,21 @@ export default function Home() {
         <p className="mt-3 text-sm text-indigo-200/70">
           카드를 눌러 오늘 하루의 운세를 확인해보세요
         </p>
+      </div>
+
+      <div className="relative z-10 w-full max-w-xs">
+        <label htmlFor="name" className="sr-only">
+          이름
+        </label>
+        <input
+          id="name"
+          type="text"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="이름을 입력하세요 (선택, 비우면 익명)"
+          maxLength={20}
+          className="w-full rounded-full border border-amber-200/30 bg-white/5 px-4 py-2 text-center text-sm text-amber-50 placeholder:text-indigo-200/50 backdrop-blur focus:border-amber-200/60 focus:outline-none"
+        />
       </div>
 
       <button
@@ -246,7 +296,7 @@ export default function Home() {
           <h2 className="text-lg font-semibold text-amber-100">
             📜 내 운세 기록
           </h2>
-          {mounted && history.length > 0 && (
+          {mounted && records.length > 0 && (
             <button
               type="button"
               onClick={handleClearHistory}
@@ -262,7 +312,7 @@ export default function Home() {
             <p className="px-4 py-8 text-center text-sm text-indigo-200/50">
               기록을 불러오는 중…
             </p>
-          ) : history.length === 0 ? (
+          ) : records.length === 0 ? (
             <p className="px-4 py-8 text-center text-sm text-indigo-200/60">
               아직 기록이 없어요. 카드를 뒤집어 운세를 뽑아보세요!
             </p>
@@ -270,26 +320,28 @@ export default function Home() {
             <table className="w-full min-w-[32rem] border-collapse text-left text-sm">
               <thead>
                 <tr className="border-b border-white/10 text-xs tracking-wide text-purple-200/70 uppercase">
-                  <th className="px-4 py-3 font-medium">뽑은 시각</th>
-                  <th className="px-4 py-3 font-medium">운세</th>
                   <th className="px-4 py-3 font-medium whitespace-nowrap">
-                    행운의 아이템 · 색 · 숫자
+                    날짜
                   </th>
+                  <th className="px-4 py-3 font-medium whitespace-nowrap">
+                    이름
+                  </th>
+                  <th className="px-4 py-3 font-medium">운세</th>
                 </tr>
               </thead>
               <tbody>
-                {history.map((entry) => (
+                {records.map((record, i) => (
                   <tr
-                    key={entry.drawnAt}
-                    className="border-b border-white/5 last:border-0 text-indigo-100/90"
+                    key={`${record.createdAt}-${i}`}
+                    className="border-b border-white/5 text-indigo-100/90 last:border-0"
                   >
                     <td className="px-4 py-3 align-top whitespace-nowrap text-indigo-200/70">
-                      {formatTime(entry.drawnAt)}
+                      {formatTime(record.createdAt)}
                     </td>
-                    <td className="px-4 py-3 align-top">{entry.message}</td>
-                    <td className="px-4 py-3 align-top whitespace-nowrap text-indigo-200/80">
-                      {entry.item} · {entry.color} · {entry.number}
+                    <td className="px-4 py-3 align-top whitespace-nowrap text-amber-100/90">
+                      {record.name}
                     </td>
+                    <td className="px-4 py-3 align-top">{record.content}</td>
                   </tr>
                 ))}
               </tbody>
