@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import type { User } from "@supabase/supabase-js";
 import { getSupabase } from "@/lib/supabase";
 
 const TABLE = "fortunes";
@@ -131,30 +132,95 @@ export default function Home() {
   const [records, setRecords] = useState<FortuneRecord[]>([]);
   const [mounted, setMounted] = useState(false);
 
-  // 마운트 후 Supabase에서 최신 기록을 불러온다 (브라우저에서 직접 조회).
-  useEffect(() => {
-    let active = true;
+  // 인증 상태
+  const [user, setUser] = useState<User | null>(null);
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
+  const [authMsg, setAuthMsg] = useState("");
+  const [authBusy, setAuthBusy] = useState(false);
 
-    (async () => {
-      try {
-        const { data, error } = await getSupabase()
-          .from(TABLE)
-          .select(COLUMNS)
-          .order("created_at", { ascending: false })
-          .limit(50);
-        if (error) throw error;
-        if (active) setRecords((data as FortuneRow[]).map(rowToRecord));
-      } catch (e) {
-        console.error("운세 기록 조회 실패:", (e as Error).message);
-      } finally {
-        if (active) setMounted(true);
+  // 내 운세 기록을 Supabase에서 조회한다 (RLS로 본인 것만 내려옴).
+  const loadRecords = useCallback(async () => {
+    try {
+      const { data, error } = await getSupabase()
+        .from(TABLE)
+        .select(COLUMNS)
+        .order("created_at", { ascending: false })
+        .limit(50);
+      if (error) throw error;
+      setRecords((data as FortuneRow[]).map(rowToRecord));
+    } catch (e) {
+      console.error("운세 기록 조회 실패:", (e as Error).message);
+    }
+  }, []);
+
+  // 마운트 후: 현재 세션 확인 + 인증 상태 변화 구독.
+  useEffect(() => {
+    const supabase = getSupabase();
+
+    supabase.auth.getSession().then(({ data }) => {
+      setUser(data.session?.user ?? null);
+      if (data.session?.user) void loadRecords();
+      setMounted(true);
+    });
+
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      const nextUser = session?.user ?? null;
+      setUser(nextUser);
+      if (nextUser) {
+        void loadRecords();
+      } else {
+        setRecords([]);
       }
-    })();
+    });
 
     return () => {
-      active = false;
+      sub.subscription.unsubscribe();
     };
-  }, []);
+  }, [loadRecords]);
+
+  const handleAuth = async () => {
+    setAuthMsg("");
+    const email = authEmail.trim();
+    if (!email || !authPassword) {
+      setAuthMsg("이메일과 비밀번호를 입력하세요.");
+      return;
+    }
+    setAuthBusy(true);
+    try {
+      const supabase = getSupabase();
+      if (authMode === "signup") {
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password: authPassword,
+        });
+        if (error) {
+          setAuthMsg("회원가입 실패: " + error.message);
+        } else if (data.user && !data.session) {
+          // 이메일 인증이 켜져 있는 경우
+          setAuthMsg("확인 메일을 보냈어요. 메일의 링크로 인증 후 로그인하세요.");
+        } else {
+          setAuthPassword("");
+        }
+      } else {
+        const { error } = await supabase.auth.signInWithPassword({
+          email,
+          password: authPassword,
+        });
+        if (error) setAuthMsg("로그인 실패: " + error.message);
+        else setAuthPassword("");
+      }
+    } finally {
+      setAuthBusy(false);
+    }
+  };
+
+  const handleSignOut = async () => {
+    await getSupabase().auth.signOut();
+    setAuthEmail("");
+    setAuthPassword("");
+  };
 
   const handleDraw = () => {
     if (flipped) {
@@ -165,6 +231,9 @@ export default function Home() {
     setResult(fortune);
     setFlipped(true);
 
+    // 로그인한 경우에만 저장한다.
+    if (!user) return;
+
     const who = name.trim() || "익명";
     // 낙관적 업데이트 (화면에 즉시 반영)
     const optimistic: FortuneRecord = {
@@ -174,7 +243,7 @@ export default function Home() {
     };
     setRecords((prev) => [optimistic, ...prev]);
 
-    // Supabase에 자동 저장 (날짜 created_at 은 DB에서 기록)
+    // Supabase에 저장 (user_id·created_at 은 DB에서 자동 기록)
     getSupabase()
       .from(TABLE)
       .insert({ name: who, content: fortune.message })
@@ -222,6 +291,100 @@ export default function Home() {
         <p className="mt-3 text-sm text-indigo-200/70">
           카드를 눌러 오늘 하루의 운세를 확인해보세요
         </p>
+      </div>
+
+      {/* 인증 패널: 로그인 폼 또는 로그인 상태 표시 */}
+      <div className="relative z-10 w-full max-w-xs">
+        {!mounted ? null : user ? (
+          <div className="flex items-center justify-between gap-2 rounded-2xl border border-amber-200/30 bg-white/5 px-4 py-3 text-sm backdrop-blur">
+            <span className="truncate text-amber-100">
+              <span className="text-indigo-200/70">로그인: </span>
+              {user.email}
+            </span>
+            <button
+              type="button"
+              onClick={handleSignOut}
+              className="shrink-0 rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs text-indigo-200/80 transition hover:bg-white/10"
+            >
+              로그아웃
+            </button>
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-amber-200/30 bg-white/5 p-4 backdrop-blur">
+            <div className="mb-3 flex gap-1 text-xs">
+              <button
+                type="button"
+                onClick={() => {
+                  setAuthMode("signin");
+                  setAuthMsg("");
+                }}
+                className={`flex-1 rounded-full px-3 py-1 transition ${
+                  authMode === "signin"
+                    ? "bg-amber-200/20 text-amber-100"
+                    : "text-indigo-200/60 hover:text-indigo-100"
+                }`}
+              >
+                로그인
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAuthMode("signup");
+                  setAuthMsg("");
+                }}
+                className={`flex-1 rounded-full px-3 py-1 transition ${
+                  authMode === "signup"
+                    ? "bg-amber-200/20 text-amber-100"
+                    : "text-indigo-200/60 hover:text-indigo-100"
+                }`}
+              >
+                회원가입
+              </button>
+            </div>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                void handleAuth();
+              }}
+              className="flex flex-col gap-2"
+            >
+              <input
+                type="email"
+                value={authEmail}
+                onChange={(e) => setAuthEmail(e.target.value)}
+                placeholder="이메일"
+                autoComplete="email"
+                className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-amber-50 placeholder:text-indigo-200/40 focus:border-amber-200/50 focus:outline-none"
+              />
+              <input
+                type="password"
+                value={authPassword}
+                onChange={(e) => setAuthPassword(e.target.value)}
+                placeholder="비밀번호 (6자 이상)"
+                autoComplete={
+                  authMode === "signup" ? "new-password" : "current-password"
+                }
+                className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-amber-50 placeholder:text-indigo-200/40 focus:border-amber-200/50 focus:outline-none"
+              />
+              <button
+                type="submit"
+                disabled={authBusy}
+                className="rounded-full border border-amber-200/40 bg-amber-200/10 px-4 py-2 text-sm font-medium text-amber-100 transition hover:bg-amber-200/20 disabled:opacity-50"
+              >
+                {authBusy
+                  ? "처리 중…"
+                  : authMode === "signup"
+                    ? "회원가입"
+                    : "로그인"}
+              </button>
+            </form>
+            {authMsg && (
+              <p className="mt-2 text-center text-xs text-amber-200/90">
+                {authMsg}
+              </p>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="relative z-10 w-full max-w-xs">
@@ -296,7 +459,7 @@ export default function Home() {
           <h2 className="text-lg font-semibold text-amber-100">
             📜 내 운세 기록
           </h2>
-          {mounted && records.length > 0 && (
+          {mounted && user && records.length > 0 && (
             <button
               type="button"
               onClick={handleClearHistory}
@@ -311,6 +474,10 @@ export default function Home() {
           {!mounted ? (
             <p className="px-4 py-8 text-center text-sm text-indigo-200/50">
               기록을 불러오는 중…
+            </p>
+          ) : !user ? (
+            <p className="px-4 py-8 text-center text-sm text-indigo-200/60">
+              로그인하면 내가 뽑은 운세가 여기에 저장됩니다. ✨
             </p>
           ) : records.length === 0 ? (
             <p className="px-4 py-8 text-center text-sm text-indigo-200/60">
