@@ -129,6 +129,7 @@ export default function Home() {
   const [flipped, setFlipped] = useState(false);
   const [result, setResult] = useState<FortuneResult | null>(null);
   const [name, setName] = useState("");
+  const [birthdate, setBirthdate] = useState("");
   const [records, setRecords] = useState<FortuneRecord[]>([]);
   const [mounted, setMounted] = useState(false);
 
@@ -266,7 +267,11 @@ export default function Home() {
     setAiLoading(true);
     setFlipped(false); // 생성 중에는 카드 앞면
     try {
-      const res = await fetch("/api/ai-fortune", { method: "POST" });
+      const res = await fetch("/api/ai-fortune", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ birthdate }),
+      });
       const json = (await res.json()) as { message?: string; error?: string };
       if (!res.ok || !json.message) {
         throw new Error(json.error || "AI 운세 생성에 실패했어요.");
@@ -430,6 +435,23 @@ export default function Home() {
           placeholder="이름을 입력하세요 (선택, 비우면 익명)"
           maxLength={20}
           className="w-full rounded-full border border-amber-200/30 bg-white/5 px-4 py-2 text-center text-sm text-amber-50 placeholder:text-indigo-200/50 backdrop-blur focus:border-amber-200/60 focus:outline-none"
+        />
+      </div>
+
+      <div className="relative z-10 w-full max-w-xs">
+        <label
+          htmlFor="birthdate"
+          className="mb-1 block text-center text-xs text-indigo-200/60"
+        >
+          생년월일 (AI 운세에 반영돼요)
+        </label>
+        <input
+          id="birthdate"
+          type="date"
+          value={birthdate}
+          onChange={(e) => setBirthdate(e.target.value)}
+          max="9999-12-31"
+          className="w-full rounded-full border border-amber-200/30 bg-white/5 px-4 py-2 text-center text-sm text-amber-50 placeholder:text-indigo-200/50 backdrop-blur focus:border-amber-200/60 focus:outline-none [color-scheme:dark]"
         />
       </div>
 
