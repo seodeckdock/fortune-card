@@ -454,7 +454,7 @@ export default function Home() {
             {result && (
               <>
                 <span className="text-4xl">✨</span>
-                <p className="text-base leading-relaxed font-medium text-indigo-950">
+                <p className="text-base leading-relaxed font-medium whitespace-pre-line text-indigo-950">
                   {result.message}
                 </p>
                 <div className="mt-2 grid w-full grid-cols-1 gap-1 text-sm text-indigo-800/80">
