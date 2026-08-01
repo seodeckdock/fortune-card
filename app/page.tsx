@@ -140,6 +140,10 @@ export default function Home() {
   const [authMsg, setAuthMsg] = useState("");
   const [authBusy, setAuthBusy] = useState(false);
 
+  // AI 운세 생성 상태
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState("");
+
   // 내 운세 기록을 Supabase에서 조회한다 (RLS로 본인 것만 내려옴).
   const loadRecords = useCallback(async () => {
     try {
@@ -222,17 +226,9 @@ export default function Home() {
     setAuthPassword("");
   };
 
-  const handleDraw = () => {
-    if (flipped) {
-      setFlipped(false);
-      return;
-    }
-    const fortune = drawFortune();
-    setResult(fortune);
-    setFlipped(true);
-
-    // 로그인한 경우에만 저장한다.
-    if (!user) return;
+  // 뽑은 운세를 기록에 반영 + 로그인 시 Supabase 저장 (랜덤/AI 공통)
+  const recordFortune = (fortune: FortuneResult) => {
+    if (!user) return; // 로그인한 경우에만 저장
 
     const who = name.trim() || "익명";
     // 낙관적 업데이트 (화면에 즉시 반영)
@@ -250,6 +246,41 @@ export default function Home() {
       .then(({ error }) => {
         if (error) console.error("운세 저장 실패:", error.message);
       });
+  };
+
+  const handleDraw = () => {
+    if (flipped) {
+      setFlipped(false);
+      return;
+    }
+    const fortune = drawFortune();
+    setResult(fortune);
+    setFlipped(true);
+    recordFortune(fortune);
+  };
+
+  // AI(OpenRouter)로 오늘의 운세를 새로 생성한다.
+  const handleAiDraw = async () => {
+    if (aiLoading) return;
+    setAiError("");
+    setAiLoading(true);
+    setFlipped(false); // 생성 중에는 카드 앞면
+    try {
+      const res = await fetch("/api/ai-fortune", { method: "POST" });
+      const json = (await res.json()) as { message?: string; error?: string };
+      if (!res.ok || !json.message) {
+        throw new Error(json.error || "AI 운세 생성에 실패했어요.");
+      }
+      // 메시지는 AI가, 행운의 아이템·색·숫자는 랜덤으로 채운다.
+      const fortune: FortuneResult = { ...drawFortune(), message: json.message };
+      setResult(fortune);
+      setFlipped(true);
+      recordFortune(fortune);
+    } catch (e) {
+      setAiError((e as Error).message);
+    } finally {
+      setAiLoading(false);
+    }
   };
 
   const handleClearHistory = () => {
@@ -446,13 +477,28 @@ export default function Home() {
         </div>
       </button>
 
-      <button
-        type="button"
-        onClick={handleDraw}
-        className="relative z-10 rounded-full border border-amber-200/40 bg-white/5 px-6 py-2 text-sm font-medium text-amber-100 backdrop-blur transition hover:bg-white/10"
-      >
-        {flipped ? "다시 뽑기" : "오늘의 운세 보기"}
-      </button>
+      <div className="relative z-10 flex flex-col items-center gap-2">
+        <div className="flex flex-wrap items-center justify-center gap-2">
+          <button
+            type="button"
+            onClick={handleDraw}
+            className="rounded-full border border-amber-200/40 bg-white/5 px-6 py-2 text-sm font-medium text-amber-100 backdrop-blur transition hover:bg-white/10"
+          >
+            {flipped ? "다시 뽑기" : "오늘의 운세 보기"}
+          </button>
+          <button
+            type="button"
+            onClick={handleAiDraw}
+            disabled={aiLoading}
+            className="rounded-full border border-fuchsia-300/50 bg-fuchsia-400/15 px-6 py-2 text-sm font-semibold text-fuchsia-100 backdrop-blur transition hover:bg-fuchsia-400/25 disabled:opacity-60"
+          >
+            {aiLoading ? "AI가 운세를 짓는 중… ✨" : "✨ AI 운세 받기"}
+          </button>
+        </div>
+        {aiError && (
+          <p className="text-xs text-rose-300/90">{aiError}</p>
+        )}
+      </div>
 
       <section className="relative z-10 w-full max-w-2xl">
         <div className="mb-3 flex items-center justify-between">
