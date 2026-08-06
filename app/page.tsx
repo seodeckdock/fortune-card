@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import { getSupabase } from "@/lib/supabase";
 
@@ -78,6 +78,7 @@ type FortuneResult = {
   item: string;
   color: string;
   number: number;
+  image?: string; // AI가 그린 카드 그림 (data URL). 랜덤 운세에는 없다.
 };
 
 /** 화면/DB에서 다루는 운세 기록 (fortunes 테이블: 날짜·이름·운세 내용) */
@@ -144,6 +145,11 @@ export default function Home() {
   // AI 운세 생성 상태
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState("");
+
+  // AI 카드 그림 생성 상태. 문구보다 오래 걸려서 뒤늦게 도착한다.
+  const [imageLoading, setImageLoading] = useState(false);
+  // 늦게 도착한 이미지가 그 사이 새로 뽑은 운세에 붙지 않도록 세대 번호로 구분한다.
+  const drawIdRef = useRef(0);
 
   // 내 운세 기록을 Supabase에서 조회한다 (RLS로 본인 것만 내려옴).
   const loadRecords = useCallback(async () => {
@@ -254,10 +260,41 @@ export default function Home() {
       setFlipped(false);
       return;
     }
+    // 랜덤 운세는 그림 없이 즉시 나온다. 진행 중인 이미지 요청이 있다면 버린다.
+    drawIdRef.current += 1;
+    setImageLoading(false);
     const fortune = drawFortune();
     setResult(fortune);
     setFlipped(true);
     recordFortune(fortune);
+  };
+
+  // 운세 문구에 어울리는 카드 그림을 생성해 뒤늦게 채워 넣는다.
+  // 실패해도 문구는 이미 보이는 상태라 조용히 넘어간다.
+  const loadFortuneImage = async (fortune: FortuneResult, drawId: number) => {
+    setImageLoading(true);
+    try {
+      const res = await fetch("/api/fortune-image", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: fortune.message,
+          color: fortune.color,
+          birthdate,
+        }),
+      });
+      const json = (await res.json()) as { image?: string; error?: string };
+      if (drawIdRef.current !== drawId) return; // 그 사이 새 운세를 뽑았으면 무시
+      if (json.image) {
+        setResult((prev) => (prev ? { ...prev, image: json.image } : prev));
+      } else {
+        console.error("운세 이미지 생성 실패:", json.error);
+      }
+    } catch (e) {
+      console.error("운세 이미지 생성 실패:", (e as Error).message);
+    } finally {
+      if (drawIdRef.current === drawId) setImageLoading(false);
+    }
   };
 
   // AI(OpenRouter)로 오늘의 운세를 새로 생성한다.
@@ -266,6 +303,8 @@ export default function Home() {
     setAiError("");
     setAiLoading(true);
     setFlipped(false); // 생성 중에는 카드 앞면
+    const drawId = (drawIdRef.current += 1);
+    setImageLoading(false);
     try {
       const res = await fetch("/api/ai-fortune", {
         method: "POST",
@@ -281,6 +320,8 @@ export default function Home() {
       setResult(fortune);
       setFlipped(true);
       recordFortune(fortune);
+      // 문구를 먼저 보여주고, 그림은 뒤이어 채운다 (기다리지 않는다).
+      void loadFortuneImage(fortune, drawId);
     } catch (e) {
       setAiError((e as Error).message);
     } finally {
@@ -459,7 +500,7 @@ export default function Home() {
         type="button"
         onClick={handleDraw}
         aria-label="운세 카드 뒤집기"
-        className="perspective relative z-10 h-80 w-56 cursor-pointer sm:h-96 sm:w-64"
+        className="perspective relative z-10 h-96 w-60 cursor-pointer sm:h-[28rem] sm:w-72"
       >
         <div className={`flip-card-inner ${flipped ? "is-flipped" : ""}`}>
           <div className="flip-card-face flex flex-col items-center justify-center gap-4 rounded-2xl border border-amber-200/30 bg-gradient-to-br from-indigo-950 via-purple-900 to-indigo-950 shadow-[0_0_40px_rgba(168,85,247,0.35)]">
@@ -472,26 +513,42 @@ export default function Home() {
             </span>
           </div>
 
-          <div className="flip-card-face flip-card-back flex flex-col items-center justify-center gap-3 rounded-2xl border border-amber-200/30 bg-gradient-to-br from-amber-50 via-white to-indigo-50 p-6 text-center shadow-[0_0_40px_rgba(251,191,36,0.35)]">
+          {/* 그림이 들어가면서 세로 여백이 빠듯해졌다. 간격을 좁히고,
+              AI 문구가 길어지는 경우를 대비해 넘칠 때만 스크롤되도록 둔다. */}
+          <div className="flip-card-face flip-card-back flex flex-col items-center justify-center gap-2 overflow-y-auto rounded-2xl border border-amber-200/30 bg-gradient-to-br from-amber-50 via-white to-indigo-50 p-5 text-center shadow-[0_0_40px_rgba(251,191,36,0.35)]">
             {result && (
               <>
-                <span className="text-4xl">✨</span>
-                <p className="text-base leading-relaxed font-medium whitespace-pre-line text-indigo-950">
+                {result.image ? (
+                  // data URL 이라 next/image 로 최적화할 대상이 아니다.
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={result.image}
+                    alt="오늘의 운세 그림"
+                    className="h-24 w-24 shrink-0 rounded-xl object-cover shadow-md ring-1 ring-indigo-900/10"
+                  />
+                ) : imageLoading ? (
+                  <div className="flex h-24 w-24 shrink-0 animate-pulse items-center justify-center rounded-xl bg-indigo-200/50 text-2xl">
+                    🎨
+                  </div>
+                ) : (
+                  <span className="text-4xl">✨</span>
+                )}
+                <p className="text-sm leading-relaxed font-medium whitespace-pre-line text-indigo-950 sm:text-base">
                   {result.message}
                 </p>
-                <div className="mt-2 grid w-full grid-cols-1 gap-1 text-sm text-indigo-800/80">
-                  <p>
-                    🍀 행운의 아이템:{" "}
-                    <span className="font-semibold">{result.item}</span>
-                  </p>
-                  <p>
-                    🎨 행운의 색:{" "}
-                    <span className="font-semibold">{result.color}</span>
-                  </p>
-                  <p>
-                    🔢 행운의 숫자:{" "}
-                    <span className="font-semibold">{result.number}</span>
-                  </p>
+                {/* 그림이 자리를 차지하므로 행운 정보는 한 줄로 압축한다. */}
+                <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-xs text-indigo-800/80">
+                  <span>
+                    🍀 <span className="font-semibold">{result.item}</span>
+                  </span>
+                  <span aria-hidden>·</span>
+                  <span>
+                    🎨 <span className="font-semibold">{result.color}</span>
+                  </span>
+                  <span aria-hidden>·</span>
+                  <span>
+                    🔢 <span className="font-semibold">{result.number}</span>
+                  </span>
                 </div>
               </>
             )}
@@ -514,9 +571,12 @@ export default function Home() {
             disabled={aiLoading}
             className="rounded-full border border-fuchsia-300/50 bg-fuchsia-400/15 px-6 py-2 text-sm font-semibold text-fuchsia-100 backdrop-blur transition hover:bg-fuchsia-400/25 disabled:opacity-60"
           >
-            {aiLoading ? "AI가 운세를 짓는 중… ✨" : "✨ AI 운세 받기"}
+            {aiLoading ? "AI가 운세를 짓는 중… ✨" : "✨ AI 운세 + 그림 받기"}
           </button>
         </div>
+        {imageLoading && (
+          <p className="text-xs text-fuchsia-200/80">카드 그림을 그리는 중… 🎨</p>
+        )}
         {aiError && (
           <p className="text-xs text-rose-300/90">{aiError}</p>
         )}
